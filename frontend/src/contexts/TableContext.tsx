@@ -1,0 +1,322 @@
+// contexts/TableContext.tsx
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { initialTables } from "../data/tables";
+import type { TableSession } from "../types/Table";
+import type { GamingConfig } from "../types/Gaming";
+import type { Product } from "../types/Product";
+
+interface TableContextType {
+  tables: TableSession[];
+  configureTable: (tableId: string) => void;
+  startWithConfig: (tableId: string, config: GamingConfig) => void;
+  stopTable: (tableId: string) => void;
+  pauseTable: (tableId: string) => void;
+  resumeTable: (tableId: string) => void;
+  resetTable: (tableId: string) => void;
+  addProduct: (tableId: string, product: Product) => void;
+  removeProduct: (tableId: string, productId: string) => void;
+  configModal: {
+    isOpen: boolean;
+    tableId: string;
+  };
+  setConfigModal: (modal: { isOpen: boolean; tableId: string }) => void;
+}
+
+type TableAction =
+  | { type: "CONFIGURE_TABLE"; payload: string }
+  | {
+      type: "START_WITH_CONFIG";
+      payload: { tableId: string; config: GamingConfig };
+    }
+  | { type: "STOP_TABLE"; payload: string }
+  | { type: "PAUSE_TABLE"; payload: string }
+  | { type: "RESUME_TABLE"; payload: string }
+  | { type: "RESET_TABLE"; payload: string }
+  | { type: "ADD_PRODUCT"; payload: { tableId: string; product: Product } }
+  | { type: "REMOVE_PRODUCT"; payload: { tableId: string; productId: string } }
+  | { type: "SET_CONFIG_MODAL"; payload: { isOpen: boolean; tableId: string } }
+  | { type: "LOAD_TABLES"; payload: TableSession[] };
+
+const TableContext = createContext<TableContextType | undefined>(undefined);
+
+const STORAGE_KEY = "gaming_tables_data";
+
+function tableReducer(
+  state: TableSession[],
+  action: TableAction
+): TableSession[] {
+  switch (action.type) {
+    case "LOAD_TABLES":
+      return action.payload;
+
+    case "START_WITH_CONFIG":
+      return state.map((table) =>
+        table.id === action.payload.tableId
+          ? {
+              ...table,
+              status: "active",
+              startTime: Date.now(),
+              gamingConfig: action.payload.config,
+              pausedAt: undefined,
+              pausedDuration: undefined,
+              totalDuration: undefined,
+              totalPrice: 0,
+              orderedProducts: [],
+            }
+          : table
+      );
+
+    case "PAUSE_TABLE":
+      return state.map((t) => {
+        if (t.id === action.payload && t.status === "active" && t.startTime) {
+          const currentTime = Date.now();
+          const currentSessionTime = currentTime - t.startTime;
+          const totalPausedTime = (t.pausedDuration || 0) + currentSessionTime;
+
+          return {
+            ...t,
+            status: "paused",
+            pausedAt: currentTime,
+            pausedDuration: totalPausedTime,
+          };
+        }
+        return t;
+      });
+
+    case "RESUME_TABLE":
+      return state.map((t) => {
+        if (t.id === action.payload && t.status === "paused" && t.pausedAt) {
+          return {
+            ...t,
+            status: "active",
+            startTime: Date.now(),
+            pausedAt: undefined,
+          };
+        }
+        return t;
+      });
+
+    case "STOP_TABLE":
+      return state.map((t) => {
+        if (t.id === action.payload && t.startTime && t.gamingConfig) {
+          const endTime = Date.now();
+          let totalDurationMs;
+
+          if (t.status === "paused") {
+            // Eğer masa duraklatılmış durumda bitiriliyor ise, sadece pausedDuration kullan
+            totalDurationMs = t.pausedDuration || 0;
+          } else {
+            // Eğer masa aktif durumda bitiriliyor ise, pausedDuration + current session
+            totalDurationMs = (t.pausedDuration || 0) + (endTime - t.startTime);
+          }
+
+          const totalSeconds = Math.floor(totalDurationMs / 1000);
+
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const seconds = totalSeconds % 60;
+
+          const durationMin = Math.floor(totalDurationMs / 60000);
+          const durationHour = totalDurationMs / (1000 * 60 * 60);
+          const timePrice = Math.round(
+            durationHour * t.gamingConfig.hourlyRate
+          );
+
+          const productTotal = (t.orderedProducts ?? []).reduce(
+            (sum, p) => sum + p.price,
+            0
+          );
+
+          return {
+            ...t,
+            status: "done",
+            endTime,
+            totalMinutes: durationMin,
+            totalPrice: productTotal + timePrice,
+            totalDuration: { hours, minutes, seconds },
+          };
+        }
+        return t;
+      });
+
+    case "RESET_TABLE":
+      return state.map((t) =>
+        t.id === action.payload
+          ? {
+              ...t,
+              status: "idle",
+              startTime: undefined,
+              endTime: undefined,
+              pausedAt: undefined,
+              pausedDuration: undefined,
+              totalMinutes: 0,
+              totalPrice: 0,
+              totalDuration: undefined,
+              orderedProducts: [],
+              gamingConfig: undefined,
+            }
+          : t
+      );
+
+    case "ADD_PRODUCT":
+      return state.map((t) => {
+        if (t.id === action.payload.tableId) {
+          const updatedProducts = [
+            ...(t.orderedProducts || []),
+            action.payload.product,
+          ];
+          const productTotal = updatedProducts.reduce(
+            (sum, p) => sum + p.price,
+            0
+          );
+          const hourlyRate = t.gamingConfig?.hourlyRate || 100;
+          const timePrice =
+            t.startTime && t.endTime
+              ? Math.round(
+                  ((t.endTime - t.startTime) / (1000 * 60 * 60)) * hourlyRate
+                )
+              : 0;
+
+          return {
+            ...t,
+            orderedProducts: updatedProducts,
+            totalPrice: timePrice + productTotal,
+          };
+        }
+        return t;
+      });
+
+    case "REMOVE_PRODUCT":
+      return state.map((t) => {
+        if (t.id === action.payload.tableId) {
+          const updatedProducts = (t.orderedProducts ?? []).filter(
+            (p) => p.id !== action.payload.productId
+          );
+          const productTotal = updatedProducts.reduce(
+            (sum, p) => sum + p.price,
+            0
+          );
+          const now = Date.now();
+          const effectiveEndTime = t.endTime ?? now;
+          const hourlyRate = t.gamingConfig?.hourlyRate || 100;
+          const timePrice = t.startTime
+            ? Math.round(
+                ((effectiveEndTime - t.startTime) / (1000 * 60 * 60)) *
+                  hourlyRate
+              )
+            : 0;
+
+          return {
+            ...t,
+            orderedProducts: updatedProducts,
+            totalPrice: timePrice + productTotal,
+          };
+        }
+        return t;
+      });
+
+    default:
+      return state;
+  }
+}
+
+export function TableProvider({ children }: { children: ReactNode }) {
+  const [tables, dispatch] = useReducer(tableReducer, initialTables);
+  const [configModal, setConfigModalState] = useState<{
+    isOpen: boolean;
+    tableId: string;
+  }>({
+    isOpen: false,
+    tableId: "",
+  });
+
+  // localStorage'dan veri yükle
+  useEffect(() => {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        dispatch({ type: "LOAD_TABLES", payload: parsedData });
+      } catch (error) {
+        console.error("Error loading table data:", error);
+      }
+    }
+  }, []);
+
+  // Her değişiklikte localStorage'a kaydet
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tables));
+  }, [tables]);
+
+  const configureTable = (tableId: string) => {
+    setConfigModalState({ isOpen: true, tableId });
+  };
+
+  const startWithConfig = (tableId: string, config: GamingConfig) => {
+    dispatch({ type: "START_WITH_CONFIG", payload: { tableId, config } });
+    setConfigModalState({ isOpen: false, tableId: "" });
+  };
+
+  const pauseTable = (tableId: string) => {
+    dispatch({ type: "PAUSE_TABLE", payload: tableId });
+  };
+
+  const resumeTable = (tableId: string) => {
+    dispatch({ type: "RESUME_TABLE", payload: tableId });
+  };
+
+  const stopTable = (tableId: string) => {
+    dispatch({ type: "STOP_TABLE", payload: tableId });
+  };
+
+  const resetTable = (tableId: string) => {
+    dispatch({ type: "RESET_TABLE", payload: tableId });
+  };
+
+  const addProduct = (tableId: string, product: Product) => {
+    dispatch({ type: "ADD_PRODUCT", payload: { tableId, product } });
+  };
+
+  const removeProduct = (tableId: string, productId: string) => {
+    dispatch({ type: "REMOVE_PRODUCT", payload: { tableId, productId } });
+  };
+
+  const setConfigModal = (modal: { isOpen: boolean; tableId: string }) => {
+    setConfigModalState(modal);
+  };
+
+  return (
+    <TableContext.Provider
+      value={{
+        tables,
+        configureTable,
+        startWithConfig,
+        stopTable,
+        pauseTable,
+        resumeTable,
+        resetTable,
+        addProduct,
+        removeProduct,
+        configModal,
+        setConfigModal,
+      }}
+    >
+      {children}
+    </TableContext.Provider>
+  );
+}
+
+export function useTable() {
+  const context = useContext(TableContext);
+  if (context === undefined) {
+    throw new Error("useTable must be used within a TableProvider");
+  }
+  return context;
+}
