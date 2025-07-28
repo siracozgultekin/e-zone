@@ -25,6 +25,8 @@ interface Props {
   onAddProduct: (tableId: string, product: Product) => void;
   onRemoveProduct: (tableId: string, productId: string) => void;
   onConfigureTable: (tableId: string) => void;
+  onDeleteTable: (tableId: string) => void;
+  onUpdateTableName: (tableId: string, name: string) => void;
 }
 
 export function TableCard({
@@ -36,6 +38,8 @@ export function TableCard({
   onAddProduct,
   onRemoveProduct,
   onConfigureTable,
+  onDeleteTable,
+  onUpdateTableName,
 }: Props) {
   const { products } = useProducts();
   const [selectedProductId, setSelectedProductId] = useState(
@@ -48,6 +52,8 @@ export function TableCard({
     seconds: 0,
   });
   const [livePrice, setLivePrice] = useState<number>(0);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingName, setEditingName] = useState("");
 
   useEffect(() => {
     if (table.status === "active" && table.startTime && table.gamingConfig) {
@@ -167,25 +173,79 @@ export function TableCard({
     }
   };
 
+  const handleNameEdit = () => {
+    setIsEditingName(true);
+    setEditingName(table.name || `Masa-${table.id}`);
+  };
+
+  const handleNameSave = () => {
+    if (editingName.trim()) {
+      onUpdateTableName(table.id, editingName.trim());
+    }
+    setIsEditingName(false);
+  };
+
+  const handleNameCancel = () => {
+    setIsEditingName(false);
+    setEditingName("");
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleNameSave();
+    } else if (e.key === "Escape") {
+      handleNameCancel();
+    }
+  };
+
   return (
     <div
       className={`bg-zinc-800 p-4 rounded-lg text-white w-[320px] shadow-md border-2 ${statusColor}`}
     >
       <div className="flex justify-between items-center mb-3">
-        <h2 className="text-lg font-bold">Masa-{table.id}</h2>
-        <span
-          className={`text-xs px-2 py-1 rounded-full bg-zinc-700 uppercase ${
-            table.status === "active"
-              ? "text-green-400"
-              : table.status === "paused"
-              ? "text-orange-400"
-              : table.status === "done"
-              ? "text-yellow-400"
-              : "text-gray-300"
-          }`}
-        >
-          {getStatusText(table.status)}
-        </span>
+        {isEditingName ? (
+          <input
+            type="text"
+            value={editingName}
+            onChange={(e) => setEditingName(e.target.value)}
+            onKeyDown={handleKeyPress}
+            onBlur={handleNameSave}
+            className="text-lg font-bold bg-zinc-700 text-white px-2 py-1 rounded border-none outline-none focus:ring-2 focus:ring-blue-500"
+            autoFocus
+          />
+        ) : (
+          <h2
+            className="text-lg font-bold cursor-pointer hover:text-blue-400 transition-colors"
+            onDoubleClick={handleNameEdit}
+            title="Çift tıklayarak düzenleyin"
+          >
+            {table.name || `Masa-${table.id}`}
+          </h2>
+        )}
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-xs px-2 py-1 rounded-full bg-zinc-700 uppercase ${
+              table.status === "active"
+                ? "text-green-400"
+                : table.status === "paused"
+                ? "text-orange-400"
+                : table.status === "done"
+                ? "text-yellow-400"
+                : "text-gray-300"
+            }`}
+          >
+            {getStatusText(table.status)}
+          </span>
+          {table.status === "idle" && (
+            <button
+              onClick={() => onDeleteTable(table.id)}
+              className="text-red-400 hover:text-red-300 hover:bg-red-900/20 p-1 rounded transition-colors"
+              title="Masayı Sil"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Gaming Configuration Display */}

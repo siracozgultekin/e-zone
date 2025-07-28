@@ -11,6 +11,7 @@ export type TableStatus = 'idle' | 'active' | 'paused' | 'done';
 
 export interface TableSession {
   id: string;
+  name?: string; // Özelleştirilebilir masa ismi
   status: "idle" | "active" | "paused" | "done";
   startTime?: number;
   endTime?: number;

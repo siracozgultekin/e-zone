@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { initialTables } from "../data/tables";
 import type { TableSession } from "../types/Table";
 import type { GamingConfig } from "../types/Gaming";
 import type { Product } from "../types/Product";
@@ -22,6 +21,9 @@ interface TableContextType {
   resetTable: (tableId: string) => void;
   addProduct: (tableId: string, product: Product) => void;
   removeProduct: (tableId: string, productId: string) => void;
+  addTable: () => void;
+  deleteTable: (tableId: string) => void;
+  updateTableName: (tableId: string, name: string) => void;
   configModal: {
     isOpen: boolean;
     tableId: string;
@@ -41,12 +43,69 @@ type TableAction =
   | { type: "RESET_TABLE"; payload: string }
   | { type: "ADD_PRODUCT"; payload: { tableId: string; product: Product } }
   | { type: "REMOVE_PRODUCT"; payload: { tableId: string; productId: string } }
+  | { type: "ADD_TABLE" }
+  | { type: "DELETE_TABLE"; payload: string }
+  | { type: "UPDATE_TABLE_NAME"; payload: { tableId: string; name: string } }
   | { type: "SET_CONFIG_MODAL"; payload: { isOpen: boolean; tableId: string } }
   | { type: "LOAD_TABLES"; payload: TableSession[] };
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
 
 const STORAGE_KEY = "gaming_tables_data";
+
+// Varsayılan masa listesini oluştur
+function getInitialTables(): TableSession[] {
+  return [
+    {
+      id: "1",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "2",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "3",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "4",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "5",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "6",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "7",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+    {
+      id: "8",
+      status: "idle",
+      orderedProducts: [],
+      totalPrice: 0,
+    },
+  ];
+}
 
 function tableReducer(
   state: TableSession[],
@@ -196,9 +255,16 @@ function tableReducer(
     case "REMOVE_PRODUCT":
       return state.map((t) => {
         if (t.id === action.payload.tableId) {
-          const updatedProducts = (t.orderedProducts ?? []).filter(
-            (p) => p.id !== action.payload.productId
+          // Sadece 1 adet silme mantığı - ilk bulunan ürünü sil
+          const updatedProducts = [...(t.orderedProducts ?? [])];
+          const productIndex = updatedProducts.findIndex(
+            (p) => p.id === action.payload.productId
           );
+
+          if (productIndex !== -1) {
+            updatedProducts.splice(productIndex, 1);
+          }
+
           const productTotal = updatedProducts.reduce(
             (sum, p) => sum + p.price,
             0
@@ -222,13 +288,39 @@ function tableReducer(
         return t;
       });
 
+    case "ADD_TABLE":
+      // Mevcut masalardan en büyük ID'yi bul, yoksa 0'dan başla
+      const existingIds = state
+        .map((t) => parseInt(t.id))
+        .filter((id) => !isNaN(id));
+      const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+      const newTableId = String(maxId + 1);
+
+      const newTable: TableSession = {
+        id: newTableId,
+        status: "idle",
+        orderedProducts: [],
+        totalPrice: 0,
+      };
+      return [...state, newTable];
+
+    case "DELETE_TABLE":
+      return state.filter((t) => t.id !== action.payload);
+
+    case "UPDATE_TABLE_NAME":
+      return state.map((t) =>
+        t.id === action.payload.tableId
+          ? { ...t, name: action.payload.name }
+          : t
+      );
+
     default:
       return state;
   }
 }
 
 export function TableProvider({ children }: { children: ReactNode }) {
-  const [tables, dispatch] = useReducer(tableReducer, initialTables);
+  const [tables, dispatch] = useReducer(tableReducer, []);
   const [configModal, setConfigModalState] = useState<{
     isOpen: boolean;
     tableId: string;
@@ -240,19 +332,38 @@ export function TableProvider({ children }: { children: ReactNode }) {
   // localStorage'dan veri yükle
   useEffect(() => {
     const savedData = localStorage.getItem(STORAGE_KEY);
+    console.log("Loading from localStorage:", savedData);
+
     if (savedData) {
       try {
         const parsedData = JSON.parse(savedData);
+        console.log("Parsed data:", parsedData);
         dispatch({ type: "LOAD_TABLES", payload: parsedData });
       } catch (error) {
         console.error("Error loading table data:", error);
+        // Hata durumunda varsayılan tabloları yükle
+        const initialTables = getInitialTables();
+        console.log("Loading initial tables due to error:", initialTables);
+        dispatch({ type: "LOAD_TABLES", payload: initialTables });
       }
+    } else {
+      // localStorage boşsa varsayılan tabloları yükle
+      const initialTables = getInitialTables();
+      console.log(
+        "Loading initial tables (localStorage empty):",
+        initialTables
+      );
+      dispatch({ type: "LOAD_TABLES", payload: initialTables });
     }
   }, []);
 
-  // Her değişiklikte localStorage'a kaydet
+  // Her değişiklikte localStorage'a kaydet (sadece tables yüklendikten sonra)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tables));
+    // İlk yüklemede boş array kaydetmeyi önle
+    if (tables.length > 0) {
+      console.log("Saving tables to localStorage:", tables);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tables));
+    }
   }, [tables]);
 
   const configureTable = (tableId: string) => {
@@ -288,6 +399,18 @@ export function TableProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "REMOVE_PRODUCT", payload: { tableId, productId } });
   };
 
+  const addTable = () => {
+    dispatch({ type: "ADD_TABLE" });
+  };
+
+  const deleteTable = (tableId: string) => {
+    dispatch({ type: "DELETE_TABLE", payload: tableId });
+  };
+
+  const updateTableName = (tableId: string, name: string) => {
+    dispatch({ type: "UPDATE_TABLE_NAME", payload: { tableId, name } });
+  };
+
   const setConfigModal = (modal: { isOpen: boolean; tableId: string }) => {
     setConfigModalState(modal);
   };
@@ -304,6 +427,9 @@ export function TableProvider({ children }: { children: ReactNode }) {
         resetTable,
         addProduct,
         removeProduct,
+        addTable,
+        deleteTable,
+        updateTableName,
         configModal,
         setConfigModal,
       }}

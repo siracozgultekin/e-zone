@@ -53,16 +53,9 @@ function App() {
                   alt="E-Zone Logo"
                   className="w-8 h-8 lg:w-10 lg:h-10"
                 />
-                <span className="italic font-mono">Ezan Cafe</span>
+                <span className="italic font-mono">Playstation Cafe</span>
               </div>
-              <div className="flex justify-center">
-                <button
-                  onClick={handleOpenWebsite}
-                  className="text-xs lg:text-sm text-gray-400 hover:text-gray-200 transition-colors cursor-pointer bg-transparent border-none"
-                >
-                  SİRACSOFT © 2025
-                </button>
-              </div>
+              <div className="flex justify-center"></div>
               <div className="flex justify-end gap-2 lg:gap-4">
                 <Link
                   to="/"
