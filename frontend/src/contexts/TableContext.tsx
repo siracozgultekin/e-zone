@@ -133,6 +133,9 @@ function tableReducer(
               totalDuration: undefined,
               totalPrice: 0,
               orderedProducts: [],
+              // Clear any previously transferred amount so a new session doesn't
+              // start with an existing balance from a previous transfer.
+              transferredAmount: undefined,
             }
           : table
       );
@@ -247,6 +250,10 @@ function tableReducer(
             totalMinutes: Math.floor(totalDurationMs / 60000),
             totalPrice: finalTotal,
             totalDuration: { hours, minutes, seconds },
+            // After transferring this table's balance to another table, clear
+            // the transferredAmount on the source so it doesn't remain and
+            // cause duplicate/leftover charges later.
+            transferredAmount: undefined,
           } as TableSession;
         }
         return t;
@@ -291,6 +298,8 @@ function tableReducer(
               totalDuration: undefined,
               orderedProducts: [],
               gamingConfig: undefined,
+              // Ensure any transferred balance is cleared when resetting the table
+              transferredAmount: undefined,
             }
           : t
       );
