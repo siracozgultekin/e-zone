@@ -74,7 +74,7 @@ export function TableCard({
           (sum, p) => sum + p.price,
           0
         );
-        setLivePrice(timePrice + productTotal);
+        setLivePrice(timePrice + productTotal + (table.transferredAmount || 0));
       }, 1000);
 
       return () => clearInterval(interval);
@@ -93,13 +93,13 @@ export function TableCard({
         (sum, p) => sum + p.price,
         0
       );
-      setLivePrice(timePrice + productTotal);
+      setLivePrice(timePrice + productTotal + (table.transferredAmount || 0));
     } else if (table.status === "done" && table.totalDuration) {
       setLiveTime(table.totalDuration);
-      setLivePrice(table.totalPrice ?? 0);
+      setLivePrice((table.totalPrice ?? 0) + (table.transferredAmount || 0));
     } else {
       setLiveTime({ hours: 0, minutes: 0, seconds: 0 });
-      setLivePrice(table.totalPrice ?? 0);
+      setLivePrice((table.totalPrice ?? 0) + (table.transferredAmount || 0));
     }
   }, [
     table.status,
@@ -109,6 +109,7 @@ export function TableCard({
     table.totalPrice,
     table.totalDuration,
     table.gamingConfig,
+    table.transferredAmount,
   ]);
 
   const groupedProducts = (table.orderedProducts || []).reduce(

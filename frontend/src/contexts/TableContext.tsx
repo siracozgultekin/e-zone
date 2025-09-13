@@ -24,6 +24,7 @@ interface TableContextType {
   addTable: () => void;
   deleteTable: (tableId: string) => void;
   updateTableName: (tableId: string, name: string) => void;
+  transferTable: (fromTableId: string, toTableId: string) => void;
   configModal: {
     isOpen: boolean;
     tableId: string;
@@ -47,6 +48,10 @@ type TableAction =
   | { type: "DELETE_TABLE"; payload: string }
   | { type: "UPDATE_TABLE_NAME"; payload: { tableId: string; name: string } }
   | { type: "SET_CONFIG_MODAL"; payload: { isOpen: boolean; tableId: string } }
+  | {
+      type: "TRANSFER_TABLE";
+      payload: { fromTableId: string; toTableId: string };
+    }
   | { type: "LOAD_TABLES"; payload: TableSession[] };
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
@@ -204,6 +209,72 @@ function tableReducer(
         }
         return t;
       });
+
+    case "TRANSFER_TABLE":
+      // Transfer the entire current total (timePrice + productTotal + any previous transferredAmount)
+      // First, compute the finalized source table
+      const now = Date.now();
+      const updated = state.map((t) => {
+        if (t.id === action.payload.fromTableId) {
+          let totalDurationMs = 0;
+          if (t.status === "paused") {
+            totalDurationMs = t.pausedDuration || 0;
+          } else if (t.startTime) {
+            totalDurationMs = (t.pausedDuration || 0) + (now - t.startTime);
+          }
+
+          const totalSeconds = Math.floor(totalDurationMs / 1000);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const seconds = totalSeconds % 60;
+
+          const durationHour = totalDurationMs / (1000 * 60 * 60);
+          const hourlyRate = t.gamingConfig?.hourlyRate || 0;
+          const timePrice = Math.round(durationHour * hourlyRate);
+
+          const productTotal = (t.orderedProducts ?? []).reduce(
+            (sum, p) => sum + p.price,
+            0
+          );
+
+          const existingTransferred = t.transferredAmount || 0;
+          const finalTotal = timePrice + productTotal + existingTransferred;
+
+          return {
+            ...t,
+            status: "done" as const,
+            endTime: now,
+            totalMinutes: Math.floor(totalDurationMs / 60000),
+            totalPrice: finalTotal,
+            totalDuration: { hours, minutes, seconds },
+          } as TableSession;
+        }
+        return t;
+      });
+
+      // Then, add that total to destination's transferredAmount
+      const fromTableFinal = updated.find(
+        (s) => s.id === action.payload.fromTableId
+      );
+      const amountToTransfer = fromTableFinal?.totalPrice ?? 0;
+      console.debug("TRANSFER_TABLE: computed amountToTransfer", {
+        from: action.payload.fromTableId,
+        to: action.payload.toTableId,
+        amountToTransfer,
+        fromTableFinal,
+      });
+
+      const finalState = updated.map((t) => {
+        if (t.id === action.payload.toTableId) {
+          return {
+            ...t,
+            transferredAmount: (t.transferredAmount || 0) + amountToTransfer,
+          } as TableSession;
+        }
+        return t;
+      });
+
+      return finalState as TableSession[];
 
     case "RESET_TABLE":
       return state.map((t) =>
@@ -411,6 +482,12 @@ export function TableProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "UPDATE_TABLE_NAME", payload: { tableId, name } });
   };
 
+  const transferTable = (fromTableId: string, toTableId: string) => {
+    if (fromTableId === toTableId) return;
+    console.debug("transferTable called", { fromTableId, toTableId });
+    dispatch({ type: "TRANSFER_TABLE", payload: { fromTableId, toTableId } });
+  };
+
   const setConfigModal = (modal: { isOpen: boolean; tableId: string }) => {
     setConfigModalState(modal);
   };
@@ -430,6 +507,7 @@ export function TableProvider({ children }: { children: ReactNode }) {
         addTable,
         deleteTable,
         updateTableName,
+        transferTable,
         configModal,
         setConfigModal,
       }}

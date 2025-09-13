@@ -4,6 +4,7 @@ import { TableConfigModal } from "../components/TableConfigModal";
 import { useTable } from "../contexts/TableContext";
 import type { GamingConfig } from "../types/Gaming";
 import { LayoutDashboard, Plus } from "lucide-react";
+import { useState } from "react";
 
 export function TableListPage() {
   const {
@@ -21,7 +22,11 @@ export function TableListPage() {
     updateTableName,
     configModal,
     setConfigModal,
+    transferTable,
   } = useTable();
+
+  const [mergeFrom, setMergeFrom] = useState<string>("");
+  const [mergeTo, setMergeTo] = useState<string>("");
 
   const onStartWithConfig = (config: GamingConfig) => {
     startWithConfig(configModal.tableId, config);
@@ -67,6 +72,72 @@ export function TableListPage() {
             >
               🗑️ Reset
             </button>
+            <div className="flex items-center gap-3 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm">
+              <select
+                value={mergeFrom}
+                onChange={(e) => setMergeFrom(e.target.value)}
+                className="bg-gray-600 px-3 py-1 text-sm rounded"
+              >
+                <option value="" className="">
+                  Seçin
+                </option>
+                {tables.map((t) => (
+                  <option
+                    key={t.id}
+                    value={t.id}
+                    style={{
+                      color:
+                        t.status === "active"
+                          ? "#34D399"
+                          : t.status === "done"
+                          ? "#FBBF24"
+                          : "inherit",
+                    }}
+                  >
+                    {t.name || `Masa-${t.id}`} ({t.status})
+                  </option>
+                ))}
+              </select>
+              <p className="text-lg font-semibold mx-1">→</p>
+              <select
+                value={mergeTo}
+                onChange={(e) => setMergeTo(e.target.value)}
+                className="bg-gray-600 px-3 py-1 text-sm rounded"
+              >
+                <option value="">Seçin</option>
+                {tables.map((t) => (
+                  <option
+                    key={t.id}
+                    value={t.id}
+                    style={{
+                      color:
+                        t.status === "active"
+                          ? "#34D399"
+                          : t.status === "done"
+                          ? "#FBBF24"
+                          : "inherit",
+                    }}
+                  >
+                    {t.name || `Masa-${t.id}`} ({t.status})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => {
+                  if (!mergeFrom || !mergeTo) return;
+                  if (mergeFrom === mergeTo) return;
+                  // call transfer via context method
+                  transferTable(mergeFrom, mergeTo);
+                  // reset selects
+                  setMergeFrom("");
+                  setMergeTo("");
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg"
+              >
+                Birleştir
+              </button>
+            </div>
           </div>
         </div>
       </div>

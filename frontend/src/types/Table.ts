@@ -26,4 +26,6 @@ export interface TableSession {
   };
   gamingConfig?: GamingConfig;
   orderedProducts?: Product[];
+  // Toplam olarak başka masalardan aktarılan ücretleri tutar
+  transferredAmount?: number;
 }
